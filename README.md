@@ -1,5 +1,3 @@
-Berikut adalah versi yang diperbarui dan diterjemahkan ke dalam bahasa Indonesia, dengan nama aplikasi yang diubah menjadi **Road Guard** dan tampilan yang lebih menarik untuk situs web:
-
 ---
 
 # Aplikasi Road Guard - Deteksi Kerusakan Jalan
