@@ -26,9 +26,9 @@ ROOT = HERE.parent
 
 logger = logging.getLogger(__name__)
 
-# MODEL_URL = "https://github.com/oracl4/RoadDamageDetection/raw/main/models/YOLOv8_Small_RDD.pt"
-# MODEL_LOCAL_PATH = ROOT / "./models/YOLOv8_Small_RDD.pt"
-# download_file(MODEL_URL, MODEL_LOCAL_PATH, expected_size=89569358)
+MODEL_URL = "https://github.com/oracl4/RoadDamageDetection/raw/main/models/YOLOv8_Small_RDD.pt"
+MODEL_LOCAL_PATH = ROOT / "./models/YOLOv8_Small_RDD.pt"
+download_file(MODEL_URL, MODEL_LOCAL_PATH, expected_size=89569358)
 
 # Caching Model
 cache_key = "yolov8smallrdd"
@@ -39,10 +39,10 @@ else:
     st.session_state[cache_key] = net
 
 CLASSES = [
-    "Longitudinal Crack",
-    "Transverse Crack",
-    "Alligator Crack",
-    "Potholes",
+    "Retakan Longitudinal",
+    "Retakan Transversal",
+    "Retakan Aligator",
+    "Lubang Jalan",
 ]
 
 class Detection(NamedTuple):
@@ -75,7 +75,7 @@ def processVideo(video_file, score_threshold):
     videoCapture = cv2.VideoCapture(temp_file_input)
 
     if (videoCapture.isOpened() == False):
-        st.error('Error opening the video file')
+        st.error('Error membuka file video')
     else:
         _width = int(videoCapture.get(cv2.CAP_PROP_FRAME_WIDTH))
         _height = int(videoCapture.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -86,10 +86,10 @@ def processVideo(video_file, score_threshold):
         _duration_seconds = int(_duration%60)
         _duration_strings = str(_duration_minutes) + ":" + str(_duration_seconds)
 
-        st.write("Video Duration :", _duration_strings)
-        st.write("Width, Height and FPS :", _width, _height, _fps)
+        st.write("Durasi Video:", _duration_strings)
+        st.write("Lebar, Tinggi dan FPS:", _width, _height, _fps)
 
-        inferenceBarText = "Performing inference on video, please wait."
+        inferenceBarText = "Melakukan inferensi pada video, harap tunggu."
         inferenceBar = st.progress(0, text=inferenceBarText)
 
         imageLocation = st.empty()
@@ -134,13 +134,13 @@ def processVideo(video_file, score_threshold):
         videoCapture.release()
         cv2writer.release()
 
-    st.success("Video Processed!")
+    st.success("Video Telah Diproses!")
 
     col1, col2 = st.columns(2)
     with col1:
         with open(temp_file_infer, "rb") as f:
             st.download_button(
-                label="⬇️ Download Prediction Video",
+                label="⬇️ Unduh Video Prediksi",
                 data=f,
                 file_name="RDD_Prediction.mp4",
                 mime="video/mp4",
@@ -148,26 +148,26 @@ def processVideo(video_file, score_threshold):
             )
             
     with col2:
-        if st.button('Restart Apps', use_container_width=True, type="primary"):
+        if st.button('Mulai Ulang Aplikasi', use_container_width=True, type="primary"):
             st.rerun()
 
 # Header Section
-st.image("./resource/banner.png", use_column_width="always")  # Replace with your banner
-st.title("🚧 Road Guard: Real-time Road Damage Detection - Video")
+# st.image("./resource/banner.png", use_column_width="always")  # Ganti dengan banner Anda
+st.title("🚧 Road Guard: Deteksi Kerusakan Jalan - Video")
 st.markdown(
     """
-    **Welcome to Road Guard**, a powerful AI application to detect road damage in videos!  
-    Upload a video file to analyze road conditions, and get insights on cracks, potholes, and more.  
+    **Selamat datang di Road Guard**, aplikasi AI yang kuat untuk mendeteksi kerusakan jalan dalam video!  
+    Unggah file video untuk menganalisis kondisi jalan, dan dapatkan wawasan tentang retakan, lubang jalan, dan lainnya.  
     """
 )
 
 # Sidebar
-st.sidebar.header("🔧 Video Detection Settings")
-video_file = st.file_uploader("Upload Video", type=".mp4", disabled=st.session_state.runningInference)
-st.sidebar.caption("Please upload videos up to 1GB in size. Resize or split large videos if necessary.")
+st.sidebar.header("🔧 Pengaturan Deteksi Video")
+video_file = st.file_uploader("Unggah Video", type=".mp4", disabled=st.session_state.runningInference)
+st.sidebar.caption("Silakan unggah video hingga 1GB. Ukur atau potong video besar jika diperlukan.")
 
 score_threshold = st.sidebar.slider(
-    "Confidence Threshold",
+    "Ambang Batas Keyakinan",
     min_value=0.0,
     max_value=1.0,
     value=0.5,
@@ -176,14 +176,14 @@ score_threshold = st.sidebar.slider(
 )
 st.sidebar.write(
     """
-    - **Lower threshold**: Detect more but with possible false positives.  
-    - **Higher threshold**: More accurate but could miss some damages.
+    - **Ambang batas rendah**: Deteksi lebih banyak namun bisa jadi positif palsu.  
+    - **Ambang batas tinggi**: Lebih akurat namun bisa melewatkan beberapa kerusakan.
     """
 )
 
 if video_file is not None:
-    if st.button('Process Video', use_container_width=True, disabled=st.session_state.runningInference, type="secondary", key="processing_button"):
-        st.warning(f"Processing Video: {video_file.name}")
+    if st.button('Proses Video', use_container_width=True, disabled=st.session_state.runningInference, type="secondary", key="processing_button"):
+        st.warning(f"Memproses Video: {video_file.name}")
         processVideo(video_file, score_threshold)
 
 # Footer Section
@@ -200,7 +200,7 @@ st.markdown(
     }
     </style>
     <div class="footer">
-        © 2024 Road Guard | Powered by YOLOv8 and Streamlit  
+        © 2024 Road Guard | Ditenagai oleh YOLOv8 dan Streamlit  
     </div>
     """,
     unsafe_allow_html=True,
