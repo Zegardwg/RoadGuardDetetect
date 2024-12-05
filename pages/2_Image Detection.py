@@ -22,6 +22,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Cek apakah pengguna sudah login
+if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
+    st.error("Silakan login terlebih dahulu!")
+    st.stop()  # Hentikan eksekusi jika belum login
+    
 # Paths dan Model Setup
 HERE = Path(__file__).parent
 ROOT = HERE.parent
@@ -95,7 +100,7 @@ if image_file is not None:
 
     with col1:
         st.write("### 🖼️ Gambar Original")
-        st.image(image, caption="Gambar Original", use_column_width="always")
+        st.image(image, caption="Gambar Original", use_column_width="true")
 
     # Prediksi
     image_resized = cv2.resize(_image, (640, 640), interpolation=cv2.INTER_AREA)
@@ -107,7 +112,7 @@ if image_file is not None:
 
     with col2:
         st.write("### 📊 Hasil Prediksi")
-        st.image(_image_pred, caption="Gambar dengan Anotasi Deteksi", use_column_width="always")
+        st.image(_image_pred, caption="Gambar dengan Anotasi Deteksi", use_column_width="true")
 
         # Download Gambar Hasil
         buffer = BytesIO()

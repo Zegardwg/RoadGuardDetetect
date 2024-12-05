@@ -8,6 +8,12 @@ st.set_page_config(
     layout="wide",
 )
 
+# Cek apakah pengguna sudah login
+if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
+    st.error("Silakan login terlebih dahulu!")
+    st.stop()  # Hentikan eksekusi jika belum login
+
+
 # Header
 with st.container():
     # st.image("./resource/banner.png", use_column_width="always")  # Tambahkan banner jika ada

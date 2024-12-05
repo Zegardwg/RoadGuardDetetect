@@ -15,6 +15,8 @@ from ultralytics import YOLO
 from sample_utils.download import download_file
 from sample_utils.get_STUNServer import getSTUNServer
 
+
+
 # Halaman Config
 st.set_page_config(
     page_title="Road Guard - Realtime Detection",
@@ -23,6 +25,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Cek apakah pengguna sudah login
+if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
+    st.error("Silakan login terlebih dahulu!")
+    st.stop()  # Hentikan eksekusi jika belum login
+    
 # Paths dan Setup Model
 HERE = Path(__file__).parent
 ROOT = HERE.parent
