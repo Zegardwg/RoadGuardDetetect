@@ -1,151 +1,145 @@
 import os
-import logging
-from pathlib import Path
-from typing import NamedTuple
-
 import cv2
 import numpy as np
 import streamlit as st
-
-# Deep learning framework
+import pymysql
 from ultralytics import YOLO
 from PIL import Image
 from io import BytesIO
+import pandas as pd
 
-from sample_utils.download import download_file
+# Database connection
+def connect_db():
+    try:
+        return pymysql.connect(
+            host="localhost",
+            user="root",
+            password="",
+            database="road_detection",
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+    except Exception as e:
+        st.error(f"Database connection failed: {e}")
+        return None
 
-# Halaman Config
-st.set_page_config(
-    page_title="Road Guard - Image Detection",
-    page_icon="🛣️",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# Load model
+def load_model(model_path, model_url):
+    if not os.path.exists(model_path):
+        from urllib.request import urlretrieve
+        urlretrieve(model_url, model_path)
+    return YOLO(model_path)
 
-# Cek apakah pengguna sudah login
-if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
-    st.error("Silakan login terlebih dahulu!")
-    st.stop()  # Hentikan eksekusi jika belum login
-    
-# Paths dan Model Setup
-HERE = Path(__file__).parent
-ROOT = HERE.parent
+# Save results to the database
+def save_report_to_db(connection, image_name, annotated_image, detections):
+    try:
+        with connection.cursor() as cursor:
+            # Save report
+            sql_report = "INSERT INTO reports (image_name, annotated_image) VALUES (%s, %s)"
+            cursor.execute(sql_report, (image_name, annotated_image))
+            report_id = cursor.lastrowid
 
-logger = logging.getLogger(__name__)
+            # Save detections
+            sql_detection = """
+            INSERT INTO detections (report_id, class_label, confidence, x, y, width, height)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            for detection in detections:
+                cursor.execute(sql_detection, (
+                    report_id,
+                    detection["name"],
+                    detection["confidence"],
+                    detection["box"][0],
+                    detection["box"][1],
+                    detection["box"][2],
+                    detection["box"][3],
+                ))
 
-MODEL_URL = "https://github.com/oracl4/RoadDamageDetection/raw/main/models/YOLOv8_Small_RDD.pt"
-MODEL_LOCAL_PATH = ROOT / "./models/YOLOv8_Small_RDD.pt"
-download_file(MODEL_URL, MODEL_LOCAL_PATH, expected_size=89569358)
+            connection.commit()
+            return report_id
+    except Exception as e:
+        st.error(f"Error saving report to database: {e}")
+        return None
 
-# Caching Model
-cache_key = "yolov8smallrdd"
-if cache_key in st.session_state:
-    net = st.session_state[cache_key]
-else:
-    net = YOLO(MODEL_LOCAL_PATH)
-    st.session_state[cache_key] = net
+# Streamlit app
+st.set_page_config(page_title="Road Guard", page_icon="🛣️", layout="wide")
 
-CLASSES = [
-    "Longitudinal Crack",
-    "Transverse Crack",
-    "Alligator Crack",
-    "Potholes",
-]
-
-class Detection(NamedTuple):
-    class_id: int
-    label: str
-    score: float
-    box: np.ndarray
-
-# Header
-# st.image("./resource/banner.png", use_column_width="always")  # Ganti dengan banner Anda
 st.title("🌍 Road Guard: Road Damage Detection")
 st.markdown(
-    """
-    **Selamat datang di Road Guard**, aplikasi berbasis AI untuk mendeteksi kerusakan jalan melalui gambar!  
-    Unggah gambar jalan untuk mendeteksi kerusakan seperti **retakan longitudinal**, **retakan transversal**, **retakan aligator**, dan **lubang jalan**.  
-    """
+    "Detect road damages such as longitudinal cracks, transverse cracks, alligator cracks, and potholes. Upload an image to start!"
 )
 
-st.divider()
+# Sidebar
+st.sidebar.header("🔧 Detection Settings")
+score_threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.05)
+image_file = st.file_uploader("Upload Road Image", type=["png", "jpg", "jpeg"])
 
-# Upload Gambar
-st.sidebar.header("🔧 Pengaturan Deteksi")
-image_file = st.file_uploader("Unggah Gambar Jalan", type=["png", "jpg", "jpeg"])
-score_threshold = st.sidebar.slider(
-    "Confidence Threshold",
-    min_value=0.0,
-    max_value=1.0,
-    value=0.5,
-    step=0.05,
-    help="Atur ambang batas kepercayaan untuk menyesuaikan sensitivitas deteksi.",
-)
+# YOLO model and classes
+MODEL_PATH = "./models/YOLOv8_Small_RDD.pt"
+MODEL_URL = "https://github.com/oracl4/RoadDamageDetection/raw/main/models/YOLOv8_Small_RDD.pt"
+model = load_model(MODEL_PATH, MODEL_URL)
+CLASSES = ["Longitudinal Crack", "Transverse Crack", "Alligator Crack", "Potholes"]
 
-st.sidebar.write(
-    """
-    - **Ambang Batas Rendah**: Deteksi lebih banyak, tetapi bisa menghasilkan prediksi palsu.  
-    - **Ambang Batas Tinggi**: Prediksi lebih akurat, tetapi bisa mengabaikan kerusakan kecil.
-    """
-)
-
-if image_file is not None:
-
-    # Load dan Tampilkan Gambar
+if image_file:
+    # Load and display the image
     image = Image.open(image_file)
-    _image = np.array(image)
-    h_ori, w_ori = _image.shape[:2]
+    image_array = np.array(image)
 
     col1, col2 = st.columns(2)
-
     with col1:
-        st.write("### 🖼️ Gambar Original")
-        st.image(image, caption="Gambar Original", use_column_width="true")
+        st.image(image, caption="Original Image", use_column_width=True)
 
-    # Prediksi
-    image_resized = cv2.resize(_image, (640, 640), interpolation=cv2.INTER_AREA)
-    results = net.predict(image_resized, conf=score_threshold)
-
-    # Anotasi Hasil
-    annotated_frame = results[0].plot()
-    _image_pred = cv2.resize(annotated_frame, (w_ori, h_ori), interpolation=cv2.INTER_AREA)
+    # Run YOLO detection
+    results = model.predict(cv2.resize(image_array, (640, 640)), conf=score_threshold)
+    annotated_image = results[0].plot()
 
     with col2:
-        st.write("### 📊 Hasil Prediksi")
-        st.image(_image_pred, caption="Gambar dengan Anotasi Deteksi", use_column_width="true")
+        st.image(annotated_image, caption="Detection Results", use_column_width=True)
 
-        # Download Gambar Hasil
+    # Save detection results to the database
+    connection = connect_db()
+    if connection:
         buffer = BytesIO()
-        _downloadImage = Image.fromarray(_image_pred)
-        _downloadImage.save(buffer, format="PNG")
-        _downloadImageByte = buffer.getvalue()
-
-        st.download_button(
-            label="⬇️ Unduh Gambar Prediksi",
-            data=_downloadImageByte,
-            file_name="Road_Guard_Prediction.png",
-            mime="image/png",
+        Image.fromarray(annotated_image).save(buffer, format="PNG")
+        report_id = save_report_to_db(
+            connection,
+            image_file.name,
+            buffer.getvalue(),
+            [{"name": CLASSES[int(r[5])], "confidence": r[4], "box": tuple(map(int, r[:4]))} for r in results[0].boxes.data],
         )
+        if report_id:
+            st.success(f"Report saved with ID {report_id}!")
+        connection.close()
 
-else:
-    st.write("📥 **Unggah gambar untuk memulai deteksi.**")
+# Report section
+st.title("📋 Reports")
+connection = connect_db()
+if connection:
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT report_id, image_name, upload_time FROM reports")
+            reports = cursor.fetchall()
+            if reports:
+                df_reports = pd.DataFrame(reports)
+                st.dataframe(df_reports)
 
-# Footer
-st.divider()
-st.markdown(
-    """
-    <style>
-    .footer {
-        text-align: center;
-        font-size: 14px;
-        margin-top: 20px;
-        padding: 10px;
-        background-color: #f9f9f9;
-    }
-    </style>
-    <div class="footer">
-        © 2024 Road Guard | Powered by YOLOv8 and Streamlit  
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+                selected_report_id = st.selectbox(
+                    "Select Report ID to view details:",
+                    df_reports["report_id"],
+                )
+
+                if selected_report_id:
+                    cursor.execute("SELECT image_name, annotated_image FROM reports WHERE report_id=%s", (selected_report_id,))
+                    report = cursor.fetchone()
+                    cursor.execute("SELECT * FROM detections WHERE report_id=%s", (selected_report_id,))
+                    detections = cursor.fetchall()
+
+                    st.image(
+                        Image.open(BytesIO(report["annotated_image"])),
+                        caption=f"Annotated Image for Report ID {selected_report_id}",
+                        use_column_width=True,
+                    )
+                    st.write(pd.DataFrame(detections))
+    except Exception as e:
+        st.error(f"Error retrieving reports: {e}")
+    connection.close()
