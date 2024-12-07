@@ -96,50 +96,28 @@ if image_file:
     with col2:
         st.image(annotated_image, caption="Detection Results", use_column_width=True)
 
-    # Save detection results to the database
-    connection = connect_db()
-    if connection:
-        buffer = BytesIO()
-        Image.fromarray(annotated_image).save(buffer, format="PNG")
-        report_id = save_report_to_db(
-            connection,
-            image_file.name,
-            buffer.getvalue(),
-            [{"name": CLASSES[int(r[5])], "confidence": r[4], "box": tuple(map(int, r[:4]))} for r in results[0].boxes.data],
-        )
-        if report_id:
-            st.success(f"Report saved with ID {report_id}!")
-        connection.close()
+    # Convert annotated image to bytes for saving
+    buffer = BytesIO()
+    Image.fromarray(annotated_image).save(buffer, format="PNG")
+    annotated_image_bytes = buffer.getvalue()
 
-# Report section
-st.title("📋 Reports")
-connection = connect_db()
-if connection:
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT report_id, image_name, upload_time FROM reports")
-            reports = cursor.fetchall()
-            if reports:
-                df_reports = pd.DataFrame(reports)
-                st.dataframe(df_reports)
+    # Prepare detections data
+    detections = [
+        {"name": CLASSES[int(r[5])], "confidence": r[4], "box": tuple(map(int, r[:4]))}
+        for r in results[0].boxes.data
+    ]
 
-                selected_report_id = st.selectbox(
-                    "Select Report ID to view details:",
-                    df_reports["report_id"],
-                )
+    # Display detections
+    st.write("Detected Objects:")
+    st.write(pd.DataFrame(detections))
 
-                if selected_report_id:
-                    cursor.execute("SELECT image_name, annotated_image FROM reports WHERE report_id=%s", (selected_report_id,))
-                    report = cursor.fetchone()
-                    cursor.execute("SELECT * FROM detections WHERE report_id=%s", (selected_report_id,))
-                    detections = cursor.fetchall()
-
-                    st.image(
-                        Image.open(BytesIO(report["annotated_image"])),
-                        caption=f"Annotated Image for Report ID {selected_report_id}",
-                        use_column_width=True,
-                    )
-                    st.write(pd.DataFrame(detections))
-    except Exception as e:
-        st.error(f"Error retrieving reports: {e}")
-    connection.close()
+    # Save to database option
+    if st.button("Save Report to Database"):
+        connection = connect_db()
+        if connection:
+            report_id = save_report_to_db(
+                connection, image_file.name, annotated_image_bytes, detections
+            )
+            if report_id:
+                st.success(f"Report saved with ID {report_id}!")
+            connection.close()
