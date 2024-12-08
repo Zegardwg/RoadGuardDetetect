@@ -1,18 +1,13 @@
-import os
-import logging
-from pathlib import Path
-from typing import List, NamedTuple
-
+import streamlit as st
 import cv2
 import numpy as np
-import streamlit as st
-
-# Deep learning framework
+import pymysql
+from io import BytesIO
 from ultralytics import YOLO
+from pathlib import Path
+import os
 
-from sample_utils.download import download_file
-
-# Halaman Config
+# === Konfigurasi halaman Streamlit ===
 st.set_page_config(
     page_title="Road Guard - Deteksi Kerusakan Jalan",
     page_icon="🛣️",
@@ -20,193 +15,170 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Cek apakah pengguna sudah login
-if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
-    st.error("Silakan login terlebih dahulu!")
-    st.stop()  # Hentikan eksekusi jika belum login
+# === Fungsi untuk koneksi database ===
+def connect_db():
+    try:
+        return pymysql.connect(
+            host="localhost",
+            user="root",
+            password="",
+            database="road_detection",
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+    except Exception as e:
+        st.error(f"Gagal terhubung ke database: {e}")
+        return None
 
-# Paths dan Model Setup
-HERE = Path(__file__).parent
-ROOT = HERE.parent
+# === Inisialisasi model YOLO ===
+MODEL_PATH = Path("./models/YOLOv8_Small_RDD.pt")
 
-logger = logging.getLogger(__name__)
+if not MODEL_PATH.exists():
+    st.error("Model tidak ditemukan. Pastikan model sudah diunduh di folder 'models'.")
+    st.stop()
 
-MODEL_URL = "https://github.com/oracl4/RoadDamageDetection/raw/main/models/YOLOv8_Small_RDD.pt"
-MODEL_LOCAL_PATH = ROOT / "./models/YOLOv8_Small_RDD.pt"
-download_file(MODEL_URL, MODEL_LOCAL_PATH, expected_size=89569358)
+@st.cache_resource
+def load_model():
+    return YOLO(str(MODEL_PATH))
 
-# Caching Model
-cache_key = "yolov8smallrdd"
-if cache_key in st.session_state:
-    net = st.session_state[cache_key]
-else:
-    net = YOLO(MODEL_LOCAL_PATH)
-    st.session_state[cache_key] = net
+net = load_model()
+CLASSES = ["Retakan Longitudinal", "Retakan Transversal", "Retakan Aligator", "Lubang Jalan"]
 
-CLASSES = [
-    "Retakan Longitudinal",
-    "Retakan Transversal",
-    "Retakan Aligator",
-    "Lubang Jalan",
-]
-
-class Detection(NamedTuple):
-    class_id: int
-    label: str
-    score: float
-    box: np.ndarray
-
-# Create temporary folder if doesn't exists
-if not os.path.exists('./temp'):
-   os.makedirs('./temp')
-
-temp_file_input = "./temp/video_input.mp4"
-temp_file_infer = "./temp/video_infer.mp4"
-
-# Processing state
-if 'processing_button' in st.session_state and st.session_state.processing_button == True:
-    st.session_state.runningInference = True
-else:
-    st.session_state.runningInference = False
-
-# func to save BytesIO on a drive
+# === Fungsi menyimpan BytesIO ke file ===
 def write_bytesio_to_file(filename, bytesio):
     with open(filename, "wb") as outfile:
         outfile.write(bytesio.getbuffer())
 
-def processVideo(video_file, score_threshold):
+# === Kelas untuk menyimpan deteksi ===
+class Detection:
+    def __init__(self, class_id, label, score, box):
+        self.class_id = class_id
+        self.label = label
+        self.score = score
+        self.box = box
+
+# === Fungsi menyimpan laporan ke database ===
+def save_report_to_db(connection, video_name, road_name, description, severity, detections):
+    try:
+        with connection.cursor() as cursor:
+            sql_report = """
+            INSERT INTO reports (video_name, road_name, report_description, pothole_severity)
+            VALUES (%s, %s, %s, %s)
+            """
+            cursor.execute(sql_report, (video_name, road_name, description, severity))
+            report_id = cursor.lastrowid
+
+            sql_detection = """
+            INSERT INTO detections (report_id, class_label, confidence, x, y, width, height)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            for det in detections:
+                cursor.execute(sql_detection, (
+                    report_id,
+                    det.label,
+                    det.score,
+                    det.box[0],
+                    det.box[1],
+                    det.box[2] - det.box[0],
+                    det.box[3] - det.box[1],
+                ))
+
+            connection.commit()
+            return report_id
+    except Exception as e:
+        st.error(f"Kesalahan menyimpan laporan: {e}")
+        return None
+
+# === Proses Video dengan Inferensi ===
+def process_video_with_inference(video_file, score_threshold):
+    temp_file_input = "./temp/input_video.mp4"
+    temp_file_infer = "./temp/output_infer.mp4"
+
     write_bytesio_to_file(temp_file_input, video_file)
-    
-    videoCapture = cv2.VideoCapture(temp_file_input)
+    video_capture = cv2.VideoCapture(temp_file_input)
 
-    if (videoCapture.isOpened() == False):
-        st.error('Error membuka file video')
-    else:
-        _width = int(videoCapture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        _height = int(videoCapture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        _fps = videoCapture.get(cv2.CAP_PROP_FPS)
-        _frame_count = int(videoCapture.get(cv2.CAP_PROP_FRAME_COUNT))
-        _duration = _frame_count/_fps
-        _duration_minutes = int(_duration/60)
-        _duration_seconds = int(_duration%60)
-        _duration_strings = str(_duration_minutes) + ":" + str(_duration_seconds)
+    if not video_capture.isOpened():
+        st.error("Error membuka file video.")
+        return
 
-        st.write("Durasi Video:", _duration_strings)
-        st.write("Lebar, Tinggi dan FPS:", _width, _height, _fps)
+    width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = video_capture.get(cv2.CAP_PROP_FPS)
+    frame_count = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        inferenceBarText = "Melakukan inferensi pada video, harap tunggu."
-        inferenceBar = st.progress(0, text=inferenceBarText)
+    writer = cv2.VideoWriter(temp_file_infer, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+    progress_bar = st.progress(0)
+    image_display = st.empty()
 
-        imageLocation = st.empty()
+    detections_list = []
+    frame_counter = 0
+    while video_capture.isOpened():
+        ret, frame = video_capture.read()
+        if not ret:
+            break
 
-        fourcc_mp4 = cv2.VideoWriter_fourcc(*'mp4v')
-        cv2writer = cv2.VideoWriter(temp_file_infer, fourcc_mp4, _fps, (_width, _height))
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = net.predict(frame_rgb, conf=score_threshold)
 
-        _frame_counter = 0
-        while(videoCapture.isOpened()):
-            ret, frame = videoCapture.read()
-            if ret == True:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                _image = np.array(frame)
-                image_resized = cv2.resize(_image, (640, 640), interpolation = cv2.INTER_AREA)
-                results = net.predict(image_resized, conf=score_threshold)
+        for result in results:
+            for box in result.boxes.cpu().numpy():
+                detections_list.append(
+                    Detection(
+                        class_id=int(box.cls),
+                        label=CLASSES[int(box.cls)],
+                        score=float(box.conf),
+                        box=box.xyxy[0].astype(int),
+                    )
+                )
 
-                for result in results:
-                    boxes = result.boxes.cpu().numpy()
-                    detections = [
-                        Detection(
-                            class_id=int(_box.cls),
-                            label=CLASSES[int(_box.cls)],
-                            score=float(_box.conf),
-                            box=_box.xyxy[0].astype(int),
-                        )
-                        for _box in boxes
-                    ]
+        annotated_frame = results[0].plot()
+        writer.write(cv2.cvtColor(annotated_frame, cv2.COLOR_RGB2BGR))
 
-                annotated_frame = results[0].plot()
-                _image_pred = cv2.resize(annotated_frame, (_width, _height), interpolation = cv2.INTER_AREA)
+        image_display.image(annotated_frame)
+        frame_counter += 1
+        progress_bar.progress(frame_counter / frame_count)
 
-                _out_frame = cv2.cvtColor(_image_pred, cv2.COLOR_RGB2BGR)
-                cv2writer.write(_out_frame)
-                imageLocation.image(_image_pred)
+    video_capture.release()
+    writer.release()
+    progress_bar.empty()
+    st.success("Proses video selesai!")
 
-                _frame_counter += 1
-                inferenceBar.progress(_frame_counter/_frame_count, text=inferenceBarText)
-            else:
-                inferenceBar.empty()
-                break
+    return detections_list, temp_file_infer
 
-        videoCapture.release()
-        cv2writer.release()
+# === UI Utama Streamlit ===
+def main():
+    st.title("🛣️ Road Guard: Deteksi Kerusakan Jalan")
+    video_file = st.file_uploader("Unggah Video", type=["mp4"])
+    score_threshold = st.slider("Ambang Batas Deteksi", 0.1, 1.0, 0.5, step=0.05)
 
-    st.success("Video Telah Diproses!")
+    # State untuk mengelola apakah video sudah diproses
+    if "detections" not in st.session_state:
+        st.session_state.detections = None
+        st.session_state.video_output = None
+        st.session_state.video_processed = False
 
-    col1, col2 = st.columns(2)
-    with col1:
-        with open(temp_file_infer, "rb") as f:
-            st.download_button(
-                label="⬇️ Unduh Video Prediksi",
-                data=f,
-                file_name="RDD_Prediction.mp4",
-                mime="video/mp4",
-                use_container_width=True
-            )
-            
-    with col2:
-        if st.button('Mulai Ulang Aplikasi', use_container_width=True, type="primary"):
-            st.rerun()
+    if video_file and not st.session_state.video_processed:
+        detections, video_output = process_video_with_inference(video_file, score_threshold)
+        st.session_state.detections = detections
+        st.session_state.video_output = video_output
+        st.session_state.video_processed = True
 
-# Header Section
-# st.image("./resource/banner.png", use_column_width="always")  # Ganti dengan banner Anda
-st.title("🚧 Road Guard: Deteksi Kerusakan Jalan - Video")
-st.markdown(
-    """
-    **Selamat datang di Road Guard**, aplikasi AI yang kuat untuk mendeteksi kerusakan jalan dalam video!  
-    Unggah file video untuk menganalisis kondisi jalan, dan dapatkan wawasan tentang retakan, lubang jalan, dan lainnya.  
-    """
-)
+    if st.session_state.video_processed:
+        st.success("Video berhasil diproses!")
+        road_name = st.text_input("Nama Jalan:", placeholder="Contoh: Jalan Raya Utama")
+        description = st.text_area("Deskripsi:", placeholder="Deskripsi kondisi jalan...")
+        severity = st.selectbox("Tingkat Kerusakan:", ["Ringan", "Sedang", "Berat"])
 
-# Sidebar
-st.sidebar.header("🔧 Pengaturan Deteksi Video")
-video_file = st.file_uploader("Unggah Video", type=".mp4", disabled=st.session_state.runningInference)
-st.sidebar.caption("Silakan unggah video hingga 1GB. Ukur atau potong video besar jika diperlukan.")
+        if st.button("Simpan Laporan"):
+            connection = connect_db()
+            if connection:
+                report_id = save_report_to_db(connection, video_file.name, road_name, description, severity, st.session_state.detections)
+                if report_id:
+                    st.success(f"Laporan berhasil disimpan dengan ID: {report_id}")
+                connection.close()
 
-score_threshold = st.sidebar.slider(
-    "Ambang Batas Keyakinan",
-    min_value=0.0,
-    max_value=1.0,
-    value=0.5,
-    step=0.05,
-    disabled=st.session_state.runningInference
-)
-st.sidebar.write(
-    """
-    - **Ambang batas rendah**: Deteksi lebih banyak namun bisa jadi positif palsu.  
-    - **Ambang batas tinggi**: Lebih akurat namun bisa melewatkan beberapa kerusakan.
-    """
-)
+        with open(st.session_state.video_output, "rb") as f:
+            st.download_button("⬇️ Unduh Video Prediksi", data=f, file_name="RDD_Prediction.mp4", mime="video/mp4")
 
-if video_file is not None:
-    if st.button('Proses Video', use_container_width=True, disabled=st.session_state.runningInference, type="secondary", key="processing_button"):
-        st.warning(f"Memproses Video: {video_file.name}")
-        processVideo(video_file, score_threshold)
-
-# Footer Section
-st.divider()
-st.markdown(
-    """
-    <style>
-    .footer {
-        text-align: center;
-        font-size: 14px;
-        margin-top: 20px;
-        padding: 10px;
-        background-color: #f9f9f9;
-    }
-    </style>
-    <div class="footer">
-        © 2024 Road Guard | Ditenagai oleh YOLOv8 dan Streamlit  
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+if __name__ == "__main__":
+    main()
