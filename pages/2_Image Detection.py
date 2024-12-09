@@ -67,6 +67,11 @@ def save_report_to_db(connection, image_name, road_name, description, severity, 
 # Aplikasi Streamlit
 st.set_page_config(page_title="Road Guard", page_icon="🛣️", layout="wide")
 
+# Cek apakah pengguna sudah login
+if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
+    st.error("Silakan login terlebih dahulu!")
+    st.stop()  # Hentikan eksekusi jika belum login
+
 # CSS Kustom untuk styling
 st.markdown("""
 <style>

@@ -57,6 +57,41 @@ def create_report(road_name, report_description, pothole_severity, user_id):
         finally:
             connection.close()
 
+            # Fungsi untuk memperbarui laporan
+def update_report(report_id, road_name, report_description, pothole_severity):
+    connection = create_connection()
+    if connection:
+        try:
+            with connection.cursor() as cursor:
+                query = """
+                UPDATE reports 
+                SET road_name = %s, report_description = %s, pothole_severity = %s 
+                WHERE report_id = %s
+                """
+                cursor.execute(query, (road_name, report_description, pothole_severity, report_id))
+                connection.commit()
+                st.success("Laporan berhasil diperbarui!")
+        except pymysql.MySQLError as e:
+            st.error(f"Gagal memperbarui laporan: {e}")
+        finally:
+            connection.close()
+
+# Fungsi untuk menghapus laporan
+def delete_report(report_id):
+    connection = create_connection()
+    if connection:
+        try:
+            with connection.cursor() as cursor:
+                query = "DELETE FROM reports WHERE report_id = %s"
+                cursor.execute(query, (report_id,))
+                connection.commit()
+                st.success("Laporan berhasil dihapus!")
+        except pymysql.MySQLError as e:
+            st.error(f"Gagal menghapus laporan: {e}")
+        finally:
+            connection.close()
+
+
 # Fungsi untuk menambahkan pengguna baru
 def create_user(username, password, photo):
     connection = create_connection()
@@ -72,11 +107,9 @@ def create_user(username, password, photo):
         finally:
             connection.close()
 
-# Fungsi untuk menampilkan antarmuka CRUD di sidebar
 def crud_ui():
     st.sidebar.header("⚙️ Kelola Data")
-
-    action = st.sidebar.selectbox("Pilih Aksi", ["Tambah Laporan", "Tambah Pengguna"])
+    action = st.sidebar.selectbox("Pilih Aksi", ["Tambah Laporan", "Tambah Pengguna", "Perbarui Laporan", "Hapus Laporan"])
 
     if action == "Tambah Laporan":
         st.sidebar.subheader("📝 Tambah Laporan Baru")
@@ -97,6 +130,24 @@ def crud_ui():
         if st.sidebar.button("Tambah Pengguna"):
             photo_data = photo.read() if photo else None
             create_user(username, password, photo_data)
+
+    elif action == "Perbarui Laporan":
+        st.sidebar.subheader("🔄 Perbarui Laporan")
+        report_id = st.sidebar.number_input("Report ID", min_value=1, step=1)
+        road_name = st.sidebar.text_input("Nama Jalan Baru")
+        report_description = st.sidebar.text_area("Deskripsi Baru")
+        pothole_severity = st.sidebar.selectbox("Tingkat Kerusakan Baru", ["Ringan", "Sedang", "Berat"])
+
+        if st.sidebar.button("Perbarui Laporan"):
+            update_report(report_id, road_name, report_description, pothole_severity)
+
+    elif action == "Hapus Laporan":
+        st.sidebar.subheader("🗑️ Hapus Laporan")
+        report_id = st.sidebar.number_input("Report ID", min_value=1, step=1)
+
+        if st.sidebar.button("Hapus Laporan"):
+            delete_report(report_id)
+
 
 # Fungsi untuk mendapatkan data laporan berdasarkan Report_id
 def get_report_by_id(report_id):
@@ -152,7 +203,12 @@ def show_report_by_id():
 # Fungsi utama dashboard
 def main():
     st.set_page_config(page_title="Dashboard Report", page_icon="📊", layout="wide")
-    st.title("📊 Dashboard Monitoring Laporan Kerusakan Jalan dan Data Pengguna")
+    st.title("📊 Dashboard Monitoring Laporan Road Guard")
+
+    # Cek apakah pengguna sudah login
+if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
+    st.error("Silakan login terlebih dahulu!")
+    st.stop()  # Hentikan eksekusi jika belum login
 
     # Tampilkan UI untuk CRUD di sidebar
     crud_ui()
