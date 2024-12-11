@@ -91,6 +91,27 @@ def delete_report(report_id):
         finally:
             connection.close()
 
+# Fungsi untuk mengambil data seluruh User          
+def get_all_users():
+    connection = create_connection()
+    if connection:
+        try:
+            with connection.cursor() as cursor:
+                query = """
+                SELECT id, username, photo
+                FROM users
+                """
+                cursor.execute(query)
+                result = cursor.fetchall()
+                connection.close()
+                
+                # Ubah hasil query menjadi DataFrame
+                return pd.DataFrame(result, columns=["User ID", "Username", "Photo"])
+        except pymysql.MySQLError as e:
+            st.error(f"Gagal mengambil data pengguna: {e}")
+            connection.close()
+            return pd.DataFrame(columns=["User ID", "Username", "Photo"])
+
 
 # Fungsi untuk menambahkan pengguna baru
 def create_user(username, password, photo):
@@ -107,9 +128,47 @@ def create_user(username, password, photo):
         finally:
             connection.close()
 
+# Fungsi untuk memperbarui pengguna
+def update_user(user_id, username, password, photo):
+    connection = create_connection()
+    if connection:
+        try:
+            with connection.cursor() as cursor:
+                query = """
+                UPDATE users 
+                SET username = %s, password = %s, photo = %s 
+                WHERE user_id = %s
+                """
+                cursor.execute(query, (username, password, photo, user_id))
+                connection.commit()
+                st.success("Pengguna berhasil diperbarui!")
+        except pymysql.MySQLError as e:
+            st.error(f"Gagal memperbarui pengguna: {e}")
+        finally:
+            connection.close()
+
+
+# Fungsi untuk menghapus pengguna
+def delete_user(user_id):
+    connection = create_connection()
+    if connection:
+        try:
+            with connection.cursor() as cursor:
+                query = "DELETE FROM users WHERE user_id = %s"
+                cursor.execute(query, (user_id,))
+                connection.commit()
+                st.success("Pengguna berhasil dihapus!")
+        except pymysql.MySQLError as e:
+            st.error(f"Gagal menghapus pengguna: {e}")
+        finally:
+            connection.close()
+
 def crud_ui():
     st.sidebar.header("⚙️ Kelola Data")
-    action = st.sidebar.selectbox("Pilih Aksi", ["Tambah Laporan", "Tambah Pengguna", "Perbarui Laporan", "Hapus Laporan"])
+    action = st.sidebar.selectbox("Pilih Aksi", [
+        "Tambah Laporan", "Tambah Pengguna", "Perbarui Laporan", "Hapus Laporan", 
+        "Perbarui Pengguna", "Hapus Pengguna"
+    ])
 
     if action == "Tambah Laporan":
         st.sidebar.subheader("📝 Tambah Laporan Baru")
@@ -147,6 +206,24 @@ def crud_ui():
 
         if st.sidebar.button("Hapus Laporan"):
             delete_report(report_id)
+
+    elif action == "Perbarui Pengguna":
+        st.sidebar.subheader("🔄 Perbarui Pengguna")
+        user_id = st.sidebar.number_input("User ID", min_value=1, step=1)
+        username = st.sidebar.text_input("Username Baru")
+        password = st.sidebar.text_input("Password Baru", type="password")
+        photo = st.sidebar.file_uploader("Unggah Foto Baru", type=["jpg", "jpeg", "png"])
+
+        if st.sidebar.button("Perbarui Pengguna"):
+            photo_data = photo.read() if photo else None
+            update_user(user_id, username, password, photo_data)
+
+    elif action == "Hapus Pengguna":
+        st.sidebar.subheader("🗑️ Hapus Pengguna")
+        user_id = st.sidebar.number_input("User ID", min_value=1, step=1)
+
+        if st.sidebar.button("Hapus Pengguna"):
+            delete_user(user_id)
 
 
 # Fungsi untuk mendapatkan data laporan berdasarkan Report_id
@@ -254,6 +331,11 @@ def main():
     with col3:
         st.warning("🕵️‍♂️ **Total Detections**")
         st.metric(label="Jumlah Deteksi", value=total_detections)
+
+        # Tampilkan tabel data pengguna
+    st.subheader("👥 Data Pengguna")
+    user_data = get_all_users()
+    st.dataframe(user_data)
 
 
 def get_all_reports():
