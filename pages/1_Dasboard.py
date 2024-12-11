@@ -322,7 +322,7 @@ def show_report_by_id():
                 st.image(
                     report[7],
                     caption=report[5] or "Gambar Anotasi",
-                    use_column_width=True
+                    use_container_width=True
                 )
             else:
                 st.write("*Tidak ada gambar tersedia*")
