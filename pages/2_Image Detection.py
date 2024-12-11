@@ -8,7 +8,7 @@ from PIL import Image
 from io import BytesIO
 import pandas as pd
 
-# Koneksi ke database
+# Fungsi untuk koneksi ke database
 def connect_db():
     try:
         return pymysql.connect(
@@ -23,14 +23,36 @@ def connect_db():
         st.error(f"Gagal terhubung ke database: {e}")
         return None
 
-# Memuat model
+# Fungsi untuk mendapatkan statistik
+def get_stats():
+    connection = connect_db()
+    if connection:
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) AS total_reports FROM reports")
+                total_reports = cursor.fetchone()["total_reports"]
+
+                cursor.execute("SELECT COUNT(*) AS total_users FROM users")
+                total_users = cursor.fetchone()["total_users"]
+
+                cursor.execute("SELECT COUNT(*) AS total_detections FROM detections")
+                total_detections = cursor.fetchone()["total_detections"]
+
+            connection.close()
+            return total_reports, total_users, total_detections
+        except pymysql.MySQLError as e:
+            st.error(f"Error saat mengambil data: {e}")
+            connection.close()
+            return 0, 0, 0
+
+# Fungsi untuk memuat model
 def load_model(model_path, model_url):
     if not os.path.exists(model_path):
         from urllib.request import urlretrieve
         urlretrieve(model_url, model_path)
     return YOLO(model_path)
 
-# Menyimpan hasil deteksi ke database
+# Fungsi untuk menyimpan laporan ke database
 def save_report_to_db(connection, image_name, road_name, description, severity, annotated_image, detections):
     try:
         with connection.cursor() as cursor:
@@ -48,10 +70,14 @@ def save_report_to_db(connection, image_name, road_name, description, severity, 
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
             for detection in detections:
+                # Pastikan confidence dibulatkan ke 4 angka desimal
+                rounded_confidence = round(float(detection["confidence"]), 4)
+
+                # Masukkan data deteksi ke database
                 cursor.execute(sql_detection, (
                     report_id,
                     detection["name"],
-                    detection["confidence"],
+                    rounded_confidence,  # Gunakan nilai confidence yang sudah dibulatkan
                     detection["box"][0],
                     detection["box"][1],
                     detection["box"][2],
@@ -65,7 +91,7 @@ def save_report_to_db(connection, image_name, road_name, description, severity, 
         return None
 
 # Aplikasi Streamlit
-st.set_page_config(page_title="Road Guard", page_icon="🛣️", layout="wide")
+st.set_page_config(page_title="Road Guard", page_icon="\U0001F6E3\uFE0F", layout="wide")
 
 # Cek apakah pengguna sudah login
 if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
@@ -92,13 +118,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🌍 Road Guard: Deteksi Kerusakan Jalan")
+st.title("\U0001F30D Road Guard: Deteksi Kerusakan Jalan")
 st.markdown(
     "Aplikasi ini mendeteksi kerusakan jalan seperti retak longitudinal, retak melintang, retak buaya, dan lubang jalan. Unggah gambar jalan untuk memulai!"
 )
 
 # Sidebar
-st.sidebar.header("🔧 Pengaturan Deteksi")
+st.sidebar.header("\U0001F527 Pengaturan Deteksi")
 score_threshold = st.sidebar.slider("Tingkat Kepercayaan", 0.0, 1.0, 0.5, 0.05)
 image_file = st.file_uploader("Unggah Gambar Jalan", type=["png", "jpg", "jpeg"])
 
@@ -157,3 +183,11 @@ if image_file:
                 if report_id:
                     st.success(f"Laporan berhasil disimpan dengan ID: {report_id}!")
                 connection.close()
+
+# Statistik laporan
+st.sidebar.subheader("\U0001F4CA Statistik")
+if st.sidebar.button("Tampilkan Statistik"):
+    total_reports, total_users, total_detections = get_stats()
+    st.sidebar.write(f"Total Laporan: {total_reports}")
+    st.sidebar.write(f"Total Pengguna: {total_users}")
+    st.sidebar.write(f"Total Deteksi: {total_detections}")
