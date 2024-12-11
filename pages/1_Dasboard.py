@@ -343,9 +343,6 @@ def main():
     st.set_page_config(page_title="Dashboard Report", page_icon="📊", layout="wide")
     st.title("📊 Dashboard Monitoring Laporan Kerusakan Jalan dan Data Pengguna")
 
-    # Tampilkan UI untuk CRUD di sidebar
-    crud_ui()
-
     # Ambil statistik
     total_reports, total_users, total_detections = get_stats()
 
@@ -449,5 +446,8 @@ if __name__ == '__main__':
 
     st.markdown("---")
 
-    # Fitur untuk melihat laporan berdasarkan ID
+    # Tampilkan laporan berdasarkan ID terlebih dahulu
     show_report_by_id()
+
+    # Tampilkan UI untuk CRUD di sidebar
+    crud_ui()
