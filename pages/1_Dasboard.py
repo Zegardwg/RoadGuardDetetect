@@ -341,7 +341,7 @@ if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
 # Fungsi utama dashboard
 def main():
     st.set_page_config(page_title="Dashboard Report", page_icon="📊", layout="wide")
-    st.title("📊 Dashboard Monitoring Laporan Kerusakan Jalan dan Data Pengguna")
+    st.title("📊 Dashboard Monitoring ")
 
     # Ambil statistik
     total_reports, total_users, total_detections = get_stats()

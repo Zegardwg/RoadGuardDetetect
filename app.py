@@ -131,16 +131,16 @@ def main():
         )
 
         st.divider()
-        st.subheader("📊 Statistik Penggunaan")
-        st.markdown(
-            """
-            - **Pengguna Terdaftar:** 120
-            - **Analisis Dilakukan:** 350
-            - **Jenis Kerusakan Terdeteksi:**
-              - Retakan: 200 kasus
-              - Potholes: 150 kasus
-            """
-        )
+        # st.subheader("📊 Statistik Penggunaan")
+        # st.markdown(
+        #     """
+        #     - **Pengguna Terdaftar:** 120
+        #     - **Analisis Dilakukan:** 350
+        #     - **Jenis Kerusakan Terdeteksi:**
+        #       - Retakan: 200 kasus
+        #       - Potholes: 150 kasus
+        #     """
+        # )
 
         st.divider()
         st.subheader("🔗 Dokumentasi dan Sumber")

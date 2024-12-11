@@ -141,14 +141,14 @@ if image_file:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.image(image, caption="Gambar Unggahan", use_column_width=True)
+        st.image(image, caption="Gambar Unggahan", use_container_width=True)
 
     # Jalankan deteksi YOLO
     results = model.predict(cv2.resize(image_array, (640, 640)), conf=score_threshold)
     annotated_image = results[0].plot()
 
     with col2:
-        st.image(annotated_image, caption="Hasil Deteksi", use_column_width=True)
+        st.image(annotated_image, caption="Hasil Deteksi", use_container_width=True)
 
     # Konversi gambar anotasi ke byte untuk disimpan
     buffer = BytesIO()
