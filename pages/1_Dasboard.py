@@ -230,6 +230,31 @@ if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
         st.warning("🕵️‍♂️ **Total Detections**")
         st.metric(label="Jumlah Deteksi", value=total_detections)
 
+# Fungsi utama dashboard
+def main():
+    st.set_page_config(page_title="Dashboard Report", page_icon="📊", layout="wide")
+    st.title("📊 Dashboard Monitoring Laporan Kerusakan Jalan dan Data Pengguna")
+
+    # Tampilkan UI untuk CRUD di sidebar
+    crud_ui()
+
+    # Ambil statistik
+    total_reports, total_users, total_detections = get_stats()
+
+    # Tampilkan statistik dengan tiga kolom
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.info("📋 **Total Reports**")
+        st.metric(label="Jumlah Laporan", value=total_reports)
+
+    with col2:
+        st.success("👤 **Total Users**")
+        st.metric(label="Jumlah Pengguna", value=total_users)
+
+    with col3:
+        st.warning("🕵️‍♂️ **Total Detections**")
+        st.metric(label="Jumlah Deteksi", value=total_detections)
+
 
 def get_all_reports():
     connection = create_connection()
