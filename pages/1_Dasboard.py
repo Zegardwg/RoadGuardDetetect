@@ -5,6 +5,8 @@ from PIL import Image
 import base64
 import io
 import altair as alt
+import bcrypt
+
 
 # Fungsi untuk membuat koneksi ke database MySQL
 def create_connection():
@@ -40,22 +42,25 @@ def get_stats():
 
 
 # Fungsi untuk menambahkan laporan baru
-def create_report(road_name, report_description, pothole_severity, user_id):
+def create_report(road_name, report_description, pothole_severity, image_name=None, video_name=None, annotated_image=None):
     connection = create_connection()
     if connection:
         try:
             with connection.cursor() as cursor:
+                # Tambahkan laporan ke tabel reports tanpa user_id
                 query = """
-                INSERT INTO reports (road_name, report_description, pothole_severity, user_id)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO reports (road_name, report_description, pothole_severity, image_name, video_name, annotated_image)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """
-                cursor.execute(query, (road_name, report_description, pothole_severity, user_id))
+                cursor.execute(query, (road_name, report_description, pothole_severity, image_name, video_name, annotated_image))
                 connection.commit()
                 st.success("Laporan berhasil ditambahkan!")
         except pymysql.MySQLError as e:
             st.error(f"Gagal menambahkan laporan: {e}")
         finally:
             connection.close()
+
+
 
             # Fungsi untuk memperbarui laporan
 def update_report(report_id, road_name, report_description, pothole_severity):
@@ -82,10 +87,16 @@ def delete_report(report_id):
     if connection:
         try:
             with connection.cursor() as cursor:
-                query = "DELETE FROM reports WHERE report_id = %s"
-                cursor.execute(query, (report_id,))
+                # Hapus data terkait di tabel detections
+                delete_detections_query = "DELETE FROM detections WHERE report_id = %s"
+                cursor.execute(delete_detections_query, (report_id,))
+                
+                # Hapus laporan di tabel reports
+                delete_report_query = "DELETE FROM reports WHERE report_id = %s"
+                cursor.execute(delete_report_query, (report_id,))
+                
                 connection.commit()
-                st.success("Laporan berhasil dihapus!")
+                st.success("Laporan dan data terkait berhasil dihapus!")
         except pymysql.MySQLError as e:
             st.error(f"Gagal menghapus laporan: {e}")
         finally:
@@ -130,18 +141,33 @@ def create_user(username, password, photo):
 
 # Fungsi untuk memperbarui pengguna
 def update_user(user_id, username, password, photo):
+    if not user_id:
+        st.error("ID pengguna tidak boleh kosong.")
+        return
+
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())  # Hashing password
+
     connection = create_connection()
     if connection:
         try:
             with connection.cursor() as cursor:
+                # Periksa apakah ID pengguna ada
+                query_check = "SELECT COUNT(*) FROM users WHERE id = %s"
+                cursor.execute(query_check, (user_id,))
+                result = cursor.fetchone()
+                if result[0] == 0:
+                    st.error("Pengguna tidak ditemukan.")
+                    return
+                
+                # Lanjutkan pembaruan data
                 query = """
                 UPDATE users 
                 SET username = %s, password = %s, photo = %s 
-                WHERE user_id = %s
+                WHERE id = %s
                 """
-                cursor.execute(query, (username, password, photo, user_id))
+                cursor.execute(query, (username, hashed_password, photo, user_id))
                 connection.commit()
-                st.success("Pengguna berhasil diperbarui!")
+                
         except pymysql.MySQLError as e:
             st.error(f"Gagal memperbarui pengguna: {e}")
         finally:
@@ -154,7 +180,7 @@ def delete_user(user_id):
     if connection:
         try:
             with connection.cursor() as cursor:
-                query = "DELETE FROM users WHERE user_id = %s"
+                query = "DELETE FROM users WHERE id = %s"  # Gunakan nama kolom yang benar
                 cursor.execute(query, (user_id,))
                 connection.commit()
                 st.success("Pengguna berhasil dihapus!")
@@ -168,7 +194,7 @@ def crud_ui():
     st.sidebar.title("⚙️ Kelola Data")
 
     action = st.sidebar.radio("Pilih Aksi", [
-        "Tambah Laporan", "Tambah Pengguna", "Perbarui Laporan", "Hapus Laporan", 
+         "Tambah Pengguna", "Perbarui Laporan", "Hapus Laporan", 
         "Perbarui Pengguna", "Hapus Pengguna"
     ])
 
@@ -180,7 +206,6 @@ def crud_ui():
             st.header("📝 Tambah Laporan Baru")
             col1, col2 = st.columns(2)
             road_name = col1.text_input("Nama Jalan")
-            user_id = col2.number_input("User ID", min_value=1, step=1)
             report_description = st.text_area("Deskripsi Laporan")
             pothole_severity = st.selectbox("Tingkat Kerusakan", ["Ringan", "Sedang", "Berat"])
             submit = st.form_submit_button("Tambah Laporan")
