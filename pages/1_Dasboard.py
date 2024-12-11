@@ -163,68 +163,99 @@ def delete_user(user_id):
         finally:
             connection.close()
 
+# Fungsi untuk Fitur CRUD
 def crud_ui():
-    st.sidebar.header("⚙️ Kelola Data")
-    action = st.sidebar.selectbox("Pilih Aksi", [
+    st.sidebar.title("⚙️ Kelola Data")
+
+    action = st.sidebar.radio("Pilih Aksi", [
         "Tambah Laporan", "Tambah Pengguna", "Perbarui Laporan", "Hapus Laporan", 
         "Perbarui Pengguna", "Hapus Pengguna"
     ])
 
+    st.title("🛠️ Manajemen Data")
+
+    # Tambah Laporan
     if action == "Tambah Laporan":
-        st.sidebar.subheader("📝 Tambah Laporan Baru")
-        road_name = st.sidebar.text_input("Nama Jalan")
-        report_description = st.sidebar.text_area("Deskripsi Laporan")
-        pothole_severity = st.sidebar.selectbox("Tingkat Kerusakan", ["Ringan", "Sedang", "Berat"])
-        user_id = st.sidebar.number_input("User ID", min_value=1, step=1)
-
-        if st.sidebar.button("Tambah Laporan"):
-            create_report(road_name, report_description, pothole_severity, user_id)
-
+        with st.form("tambah_laporan_form"):
+            st.header("📝 Tambah Laporan Baru")
+            col1, col2 = st.columns(2)
+            road_name = col1.text_input("Nama Jalan")
+            user_id = col2.number_input("User ID", min_value=1, step=1)
+            report_description = st.text_area("Deskripsi Laporan")
+            pothole_severity = st.selectbox("Tingkat Kerusakan", ["Ringan", "Sedang", "Berat"])
+            submit = st.form_submit_button("Tambah Laporan")
+            
+            if submit:
+                create_report(road_name, report_description, pothole_severity, user_id)
+                st.success("Laporan berhasil ditambahkan!")
+    
+    # Tambah Pengguna
     elif action == "Tambah Pengguna":
-        st.sidebar.subheader("👤 Tambah Pengguna Baru")
-        username = st.sidebar.text_input("Username")
-        password = st.sidebar.text_input("Password", type="password")
-        photo = st.sidebar.file_uploader("Unggah Foto", type=["jpg", "jpeg", "png"])
-
-        if st.sidebar.button("Tambah Pengguna"):
-            photo_data = photo.read() if photo else None
-            create_user(username, password, photo_data)
-
+        with st.form("tambah_pengguna_form"):
+            st.header("👤 Tambah Pengguna Baru")
+            col1, col2 = st.columns(2)
+            username = col1.text_input("Username")
+            password = col2.text_input("Password", type="password")
+            photo = st.file_uploader("Unggah Foto", type=["jpg", "jpeg", "png"])
+            submit = st.form_submit_button("Tambah Pengguna")
+            
+            if submit:
+                photo_data = photo.read() if photo else None
+                create_user(username, password, photo_data)
+                st.success("Pengguna berhasil ditambahkan!")
+    
+    # Perbarui Laporan
     elif action == "Perbarui Laporan":
-        st.sidebar.subheader("🔄 Perbarui Laporan")
-        report_id = st.sidebar.number_input("Report ID", min_value=1, step=1)
-        road_name = st.sidebar.text_input("Nama Jalan Baru")
-        report_description = st.sidebar.text_area("Deskripsi Baru")
-        pothole_severity = st.sidebar.selectbox("Tingkat Kerusakan Baru", ["Ringan", "Sedang", "Berat"])
-
-        if st.sidebar.button("Perbarui Laporan"):
-            update_report(report_id, road_name, report_description, pothole_severity)
-
+        with st.form("perbarui_laporan_form"):
+            st.header("🔄 Perbarui Laporan")
+            report_id = st.number_input("Report ID", min_value=1, step=1)
+            col1, col2 = st.columns(2)
+            road_name = col1.text_input("Nama Jalan Baru")
+            pothole_severity = col2.selectbox("Tingkat Kerusakan Baru", ["Ringan", "Sedang", "Berat"])
+            report_description = st.text_area("Deskripsi Baru")
+            submit = st.form_submit_button("Perbarui Laporan")
+            
+            if submit:
+                update_report(report_id, road_name, report_description, pothole_severity)
+                st.success("Laporan berhasil diperbarui!")
+    
+    # Hapus Laporan
     elif action == "Hapus Laporan":
-        st.sidebar.subheader("🗑️ Hapus Laporan")
-        report_id = st.sidebar.number_input("Report ID", min_value=1, step=1)
+        with st.form("hapus_laporan_form"):
+            st.header("🗑️ Hapus Laporan")
+            report_id = st.number_input("Report ID", min_value=1, step=1)
+            submit = st.form_submit_button("Hapus Laporan")
+            
+            if submit:
+                delete_report(report_id)
+                st.success("Laporan berhasil dihapus!")
 
-        if st.sidebar.button("Hapus Laporan"):
-            delete_report(report_id)
-
+    # Perbarui Pengguna
     elif action == "Perbarui Pengguna":
-        st.sidebar.subheader("🔄 Perbarui Pengguna")
-        user_id = st.sidebar.number_input("User ID", min_value=1, step=1)
-        username = st.sidebar.text_input("Username Baru")
-        password = st.sidebar.text_input("Password Baru", type="password")
-        photo = st.sidebar.file_uploader("Unggah Foto Baru", type=["jpg", "jpeg", "png"])
-
-        if st.sidebar.button("Perbarui Pengguna"):
-            photo_data = photo.read() if photo else None
-            update_user(user_id, username, password, photo_data)
-
+        with st.form("perbarui_pengguna_form"):
+            st.header("🔄 Perbarui Pengguna")
+            user_id = st.number_input("User ID", min_value=1, step=1)
+            col1, col2 = st.columns(2)
+            username = col1.text_input("Username Baru")
+            password = col2.text_input("Password Baru", type="password")
+            photo = st.file_uploader("Unggah Foto Baru", type=["jpg", "jpeg", "png"])
+            submit = st.form_submit_button("Perbarui Pengguna")
+            
+            if submit:
+                photo_data = photo.read() if photo else None
+                update_user(user_id, username, password, photo_data)
+                st.success("Pengguna berhasil diperbarui!")
+    
+    # Hapus Pengguna
     elif action == "Hapus Pengguna":
-        st.sidebar.subheader("🗑️ Hapus Pengguna")
-        user_id = st.sidebar.number_input("User ID", min_value=1, step=1)
-
-        if st.sidebar.button("Hapus Pengguna"):
-            delete_user(user_id)
-
+        with st.form("hapus_pengguna_form"):
+            st.header("🗑️ Hapus Pengguna")
+            user_id = st.number_input("User ID", min_value=1, step=1)
+            submit = st.form_submit_button("Hapus Pengguna")
+            
+            if submit:
+                delete_user(user_id)
+                st.success("Pengguna berhasil dihapus!")
 
 # Fungsi untuk mendapatkan data laporan berdasarkan Report_id
 def get_report_by_id(report_id):
@@ -332,10 +363,10 @@ def main():
         st.warning("🕵️‍♂️ **Total Detections**")
         st.metric(label="Jumlah Deteksi", value=total_detections)
 
-        # Tampilkan tabel data pengguna
-    st.subheader("👥 Data Pengguna")
-    user_data = get_all_users()
-    st.dataframe(user_data)
+    #     # Tampilkan tabel data pengguna
+    # st.subheader("👥 Data Pengguna")
+    # user_data = get_all_users()
+    # st.dataframe(user_data)
 
 
 def get_all_reports():
