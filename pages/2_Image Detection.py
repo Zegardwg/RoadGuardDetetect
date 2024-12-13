@@ -8,8 +8,10 @@ from PIL import Image
 from io import BytesIO
 import pandas as pd
 
-# Fungsi untuk koneksi ke database
+# ===================== Fungsi untuk Koneksi ke Database =====================
+
 def connect_db():
+    """Menghubungkan ke database MySQL."""
     try:
         return pymysql.connect(
             host="localhost",
@@ -23,8 +25,11 @@ def connect_db():
         st.error(f"Gagal terhubung ke database: {e}")
         return None
 
-# Fungsi untuk mendapatkan statistik
+
+# ===================== Fungsi untuk Mendapatkan Statistik =====================
+
 def get_stats():
+    """Mengambil statistik total laporan, pengguna, dan deteksi dari database."""
     connection = connect_db()
     if connection:
         try:
@@ -45,15 +50,21 @@ def get_stats():
             connection.close()
             return 0, 0, 0
 
-# Fungsi untuk memuat model
+
+# ===================== Fungsi untuk Memuat Model YOLO =====================
+
 def load_model(model_path, model_url):
+    """Memuat model YOLO dari path lokal atau mengunduhnya jika belum ada."""
     if not os.path.exists(model_path):
         from urllib.request import urlretrieve
         urlretrieve(model_url, model_path)
     return YOLO(model_path)
 
-# Fungsi untuk menyimpan laporan ke database
+
+# ===================== Fungsi untuk Menyimpan Laporan ke Database =====================
+
 def save_report_to_db(connection, image_name, road_name, description, severity, annotated_image, detections):
+    """Menyimpan laporan dan deteksi ke database."""
     try:
         with connection.cursor() as cursor:
             # Simpan laporan
@@ -70,14 +81,11 @@ def save_report_to_db(connection, image_name, road_name, description, severity, 
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
             for detection in detections:
-                # Pastikan confidence dibulatkan ke 4 angka desimal
                 rounded_confidence = round(float(detection["confidence"]), 4)
-
-                # Masukkan data deteksi ke database
                 cursor.execute(sql_detection, (
                     report_id,
                     detection["name"],
-                    rounded_confidence,  # Gunakan nilai confidence yang sudah dibulatkan
+                    rounded_confidence,
                     detection["box"][0],
                     detection["box"][1],
                     detection["box"][2],
@@ -90,15 +98,18 @@ def save_report_to_db(connection, image_name, road_name, description, severity, 
         st.error(f"Terjadi kesalahan saat menyimpan laporan ke database: {e}")
         return None
 
-# Aplikasi Streamlit
+
+# ===================== Konfigurasi Aplikasi Streamlit =====================
+
 st.set_page_config(page_title="Road Guard", page_icon="\U0001F6E3\uFE0F", layout="wide")
 
 # Cek apakah pengguna sudah login
 if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
     st.error("Silakan login terlebih dahulu!")
-    st.stop()  # Hentikan eksekusi jika belum login
+    st.stop()
 
-# CSS Kustom untuk styling
+# ===================== CSS Kustom untuk Styling =====================
+
 st.markdown("""
 <style>
     .report-title {
@@ -118,24 +129,29 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ===================== Judul Aplikasi =====================
+
 st.title("\U0001F30D Road Guard: Deteksi Kerusakan Jalan")
 st.markdown(
     "Aplikasi ini mendeteksi kerusakan jalan seperti retak longitudinal, retak melintang, retak buaya, dan lubang jalan. Unggah gambar jalan untuk memulai!"
 )
 
-# Sidebar
+# ===================== Sidebar =====================
+
 st.sidebar.header("\U0001F527 Pengaturan Deteksi")
 score_threshold = st.sidebar.slider("Tingkat Kepercayaan", 0.0, 1.0, 0.5, 0.05)
 image_file = st.file_uploader("Unggah Gambar Jalan", type=["png", "jpg", "jpeg"])
 
-# Model YOLO dan kelas
+# ===================== Load Model =====================
+
 MODEL_PATH = "./models/YOLOv8_Small_RDD.pt"
 MODEL_URL = "https://github.com/oracl4/RoadDamageDetection/raw/main/models/YOLOv8_Small_RDD.pt"
 model = load_model(MODEL_PATH, MODEL_URL)
 CLASSES = ["Retak Longitudinal", "Retak Melintang", "Retak Buaya", "Lubang Jalan"]
 
+# ===================== Proses Deteksi =====================
+
 if image_file:
-    # Memuat dan menampilkan gambar
     image = Image.open(image_file)
     image_array = np.array(image)
 
@@ -161,16 +177,15 @@ if image_file:
         for r in results[0].boxes.data
     ]
 
-    # Tampilkan hasil deteksi
     st.write("### Objek yang Terdeteksi:")
     st.write(pd.DataFrame(detections))
 
-    # Input untuk informasi tambahan
+    # Input informasi tambahan
     road_name = st.text_input("Masukkan Nama Jalan:", placeholder="Misalnya: Jalan Raya Utama")
     description = st.text_area("Deskripsi Laporan:", placeholder="Jelaskan kondisi jalan...")
     severity = st.selectbox("Pilih Tingkat Kerusakan:", ["Ringan", "Sedang", "Berat"])
 
-    # Opsi untuk menyimpan ke database
+    # Simpan laporan ke database
     if st.button("Simpan Laporan ke Database"):
         if not road_name or not description or not severity:
             st.error("Harap lengkapi semua kolom sebelum menyimpan.")
@@ -184,10 +199,3 @@ if image_file:
                     st.success(f"Laporan berhasil disimpan dengan ID: {report_id}!")
                 connection.close()
 
-# Statistik laporan
-st.sidebar.subheader("\U0001F4CA Statistik")
-if st.sidebar.button("Tampilkan Statistik"):
-    total_reports, total_users, total_detections = get_stats()
-    st.sidebar.write(f"Total Laporan: {total_reports}")
-    st.sidebar.write(f"Total Pengguna: {total_users}")
-    st.sidebar.write(f"Total Deteksi: {total_detections}")

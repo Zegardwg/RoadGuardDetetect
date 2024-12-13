@@ -83,7 +83,7 @@ def login():
                 st.session_state['logged_in'] = True
                 st.session_state['username'] = username
                 st.success("🚀 Login berhasil!")
-                st.experimental_set_query_params()  # Pengganti experimental_rerun untuk menghindari error
+                st.experimental_set_query_params()  
             else:
                 st.error("Username atau password salah.")
 
@@ -158,7 +158,7 @@ def main():
             st.markdown(
                 """
                 - **Lisensi dan Hak Cipta:**  
-                  Dataset: [CRDDC2022](https://github.com/oracl4/RoadDamageDetection)  
+                  Dataset: [CRDDC2022](https://crddc2022.sekilab.global/)  
                   Framework: [YOLOv8](https://github.com/ultralytics/ultralytics)  
                 """
             )
@@ -167,7 +167,7 @@ def main():
 def logout():
     st.session_state['logged_in'] = False
     st.session_state['username'] = None
-    st.experimental_set_query_params()  # Pengganti experimental_rerun untuk menghindari error
+    st.experimental_set_query_params()  
 
 if __name__ == "__main__":
     main()
